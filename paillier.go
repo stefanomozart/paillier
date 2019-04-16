@@ -23,8 +23,8 @@ type PrivateKey struct {
 var one = new(big.Int).SetInt64(1)
 var zero = new(big.Int).SetInt64(0)
 
-// GenerateKeyPair returns a Paillier key pair with the restriction that the
-// public key modular parameter N has a bit-size equivalent to the (bits) parameter
+// GenerateKeyPair returns a Paillier key pair such that the modulus `N`, in the
+// public key, has a bit length equivalent to the value informed in the `bits` parameter
 func GenerateKeyPair(bits int) (*PublicKey, *PrivateKey, error) {
 	if bits < 1024 {
 		return nil, nil, fmt.Errorf("The bitsize parameter should not be smaller then 1024")
