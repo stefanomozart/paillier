@@ -23,24 +23,27 @@ type PrivateKey struct {
 var one = new(big.Int).SetInt64(1)
 var zero = new(big.Int).SetInt64(0)
 
-// GenerateKeyPair returns a Paillier key pair such that the modulus `N`, in the
-// public key, has a bit length equivalent to the value informed in the `bits` parameter
-func GenerateKeyPair(bits int) (*PublicKey, *PrivateKey, error) {
-	if bits < 1024 {
-		return nil, nil, fmt.Errorf("The bitsize parameter should not be smaller then 1024")
+// GenerateKeyPair returns a Paillier key pair such that the squared modulus `N2`, in the
+// public key, has a bit length equivalent to the value informed in the `bitlen` parameter
+func GenerateKeyPair(bitlen int) (*PublicKey, *PrivateKey, error) {
+	if bitlen < 1024 {
+		return nil, nil, fmt.Errorf("The `bitlen` parameter should not be smaller then 1024")
 	}
-	p := getPrime(bits / 2)
-	q := getPrime(bits / 2)
+	p := getPrime(bitlen / 4)
+	q := getPrime(bitlen / 4)
+
 	n := new(big.Int).Mul(p, q)
-	g := getPrime(bits / 2)
+	nn := new(big.Int).Mul(n, n)
+
+	g := new(big.Int).Add(n, one)
 
 	lambda := phi(p, q)
 	mu := new(big.Int).ModInverse(lambda, n)
 
 	pk := &PublicKey{
 		N:  n,
-		N2: new(big.Int).Mul(n, n),
 		g:  g,
+		N2: nn,
 	}
 
 	sk := &PrivateKey{
@@ -60,8 +63,8 @@ func NewPublicKey(N, g string) (*PublicKey, error) {
 	}
 	return &PublicKey{
 		N:  n,
-		N2: new(big.Int).Mul(n, n),
 		g:  new(big.Int).Add(n, one),
+		N2: new(big.Int).Mul(n, n),
 	}, nil
 }
 
@@ -69,11 +72,16 @@ func NewPublicKey(N, g string) (*PublicKey, error) {
 // where ct :=
 func (pk *PublicKey) Encrypt(msg int64) (*big.Int, error) {
 	m := new(big.Int).SetInt64(msg)
+
 	if msg < 0 || m.Cmp(zero) == -1 || m.Cmp(pk.N) != -1 {
 		return nil, fmt.Errorf("invalid plaintext")
 	}
-	r := new(big.Int).Exp(getRandom(pk.N), pk.N, pk.N2)
+
+	r := getRandom(pk.N)
+	r.Exp(r, pk.N, pk.N2)
+
 	m.Exp(pk.g, m, pk.N2)
+
 	c := new(big.Int).Mul(m, r)
 	return c.Mod(c, pk.N2), nil
 }
@@ -81,7 +89,7 @@ func (pk *PublicKey) Encrypt(msg int64) (*big.Int, error) {
 // Decrypt returns the plaintext corresponding to the ciphertext (ct)
 // passed in the parameter
 func (sk *PrivateKey) Decrypt(ct *big.Int) (int64, error) {
-	if ct == nil {
+	if ct == nil || ct.Cmp(zero) != 1 {
 		return 0, fmt.Errorf("invalid ciphertext")
 	}
 
@@ -98,6 +106,9 @@ func (sk *PrivateKey) Decrypt(ct *big.Int) (int64, error) {
 // the corresponding messages (m1, m2) ciphered to (ct1, ct2)
 // (i.e ct1 = Enc(m1) ^ ct2 = Enc(m2) => Dec(Add(ct1, ct2)) = m1 + m2 mod N)
 func (pk *PublicKey) Add(ct1, ct2 *big.Int) (*big.Int, error) {
+	if ct1 == nil || ct2 == nil || ct1.Cmp(zero) != 1 || ct2.Cmp(zero) != 1 {
+		return nil, fmt.Errorf("invalid input")
+	}
 	z := new(big.Int).Mul(ct1, ct2)
 
 	return z.Mod(z, pk.N2), nil
@@ -106,6 +117,9 @@ func (pk *PublicKey) Add(ct1, ct2 *big.Int) (*big.Int, error) {
 // MultPlain returns the ciphertext the will decipher to multiplication
 // of the plaintexts (i.e ct = Enc(m1) => Dec(Mul(ct, m2)) = m1 * m2 mod N)
 func (pk *PublicKey) MultPlain(ct *big.Int, msg int64) (*big.Int, error) {
+	if ct == nil || ct.Cmp(zero) != 1 {
+		return nil, fmt.Errorf("invalid input")
+	}
 	return new(big.Int).Exp(ct, new(big.Int).SetInt64(msg), pk.N2), nil
 }
 
@@ -130,9 +144,10 @@ func getPrime(bits int) *big.Int {
 func getRandom(n *big.Int) *big.Int {
 	gcd := new(big.Int)
 	r := new(big.Int)
+	err := fmt.Errorf("")
 
 	for gcd.Cmp(one) != 0 {
-		r, err := rand.Int(rand.Reader, n)
+		r, err = rand.Int(rand.Reader, n)
 		if err != nil {
 			panic("Error while reading crypto/rand")
 		}
@@ -140,17 +155,6 @@ func getRandom(n *big.Int) *big.Int {
 		gcd = new(big.Int).GCD(nil, nil, r, n)
 	}
 	return r
-}
-
-// Reads `n` bytes from the crypt.rand source
-func getRandomBytes(n int64) []byte {
-	b := make([]byte, n)
-	_, err := rand.Read(b)
-	if err != nil {
-		panic("could not run rand.Read")
-	}
-
-	return b
 }
 
 // Computes Carmichael's function on `n`, `λ(n) = lcm(p-1, q-1)``
