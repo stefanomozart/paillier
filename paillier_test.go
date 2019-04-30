@@ -98,7 +98,6 @@ func TestPublicKey_Encrypt(t *testing.T) {
 			if err != nil {
 				return
 			}
-			print(ct.String())
 			if ct.Cmp(zero) != 1 {
 				t.Errorf("PublicKey.Encrypt() error = invalid ciphertext")
 				return
