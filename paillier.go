@@ -114,13 +114,25 @@ func (pk *PublicKey) Add(ct1, ct2 *big.Int) (*big.Int, error) {
 	return z.Mod(z, pk.N2), nil
 }
 
-// MultPlain returns the ciphertext the will decipher to multiplication
+// MultPlaintext returns the ciphertext the will decipher to multiplication
 // of the plaintexts (i.e ct = Enc(m1) => Dec(Mul(ct, m2)) = m1 * m2 mod N)
-func (pk *PublicKey) MultPlain(ct *big.Int, msg int64) (*big.Int, error) {
+func (pk *PublicKey) MultPlaintext(ct *big.Int, msg int64) (*big.Int, error) {
 	if ct == nil || ct.Cmp(zero) != 1 {
 		return nil, fmt.Errorf("invalid input")
 	}
 	return new(big.Int).Exp(ct, new(big.Int).SetInt64(msg), pk.N2), nil
+}
+
+// AddPlaintext returns the ciphertext the will decipher to addition
+// of the plaintexts (i.e ct = Enc(m1) => Dec(Mul(ct, m2)) = m1 + m2 mod N)
+func (pk *PublicKey) AddPlaintext(ct *big.Int, msg int64) (*big.Int, error) {
+	if ct == nil || ct.Cmp(zero) != 1 {
+		return nil, fmt.Errorf("invalid input")
+	}
+
+	ct2 := new(big.Int).Exp(pk.g, new(big.Int).SetInt64(msg), pk.N2)
+	// ct * g^msg mod N^2
+	return new(big.Int).Mod(new(big.Int).Mul(ct, ct2), pk.N2), nil
 }
 
 // L (x) = (x-1)/n is the largest integer quocient `q` to satisfy (x-1) >= a*n
