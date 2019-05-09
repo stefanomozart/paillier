@@ -11,21 +11,15 @@ func TestGenerateKeyPair(t *testing.T) {
 		bitlen  int
 		wantErr bool
 	}{
-		{
-			"bit size smaller then 1024, must return error",
-			1023,
-			true,
-		},
-		{
-			"bit size greater then 1024, must return a valid key",
-			2048,
-			false,
-		},
+		{"bit size smaller then 1024, must return error", 1023, true},
+		{"bit size equal to 1024, must return a valid key", 1024, false},
+		{"bit size greater then 1024, must return a valid key", 2048, false},
+		{"bit size greater then 1024, must return a valid key", 3072, false},
+		{"bit size greater then 1024, must return a valid key", 4096, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pk, sk, err := GenerateKeyPair(tt.bitlen)
-			//_, _, err := GenerateKeyPair(tt.bitlen)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GenerateKeyPair() error = %v, wantErr %v", err, tt.wantErr)
@@ -51,8 +45,8 @@ func TestGenerateKeyPair(t *testing.T) {
 				t.Errorf("GenerateKeyPair() error = Invalid secret key - zero values (mu, lambda) (%v, %v)", sk.mu, sk.lambda)
 				return
 			}
-			if pk.N2.BitLen() < (tt.bitlen * 3 / 4) {
-				t.Errorf("GenerateKeyPair() error = Bit length of the publick key is smaller than expected %v != %v", pk.N2.BitLen(), tt.bitlen)
+			if pk.N.BitLen() < (tt.bitlen) {
+				t.Errorf("GenerateKeyPair() error = Bit length of the publick key is smaller than expected %v != %v", pk.N.BitLen(), tt.bitlen)
 				return
 			}
 			if sk.lambda.BitLen() < 2 {
@@ -71,21 +65,9 @@ func TestPublicKey_Encrypt(t *testing.T) {
 		msg     int64
 		wantErr bool
 	}{
-		{
-			"cipher negative value, must return error",
-			-1,
-			true,
-		},
-		{
-			"cipher positive value, must return valid ciphertext",
-			1,
-			false,
-		},
-		{
-			"cipher zero value, must return valid ciphertext",
-			0,
-			false,
-		},
+		{"negative input, must return error", -1, true},
+		{"positive input, must return valid ciphertext", 1, false},
+		{"zero value, must return valid ciphertext", 0, false},
 	}
 
 	for _, tt := range tests {
@@ -99,16 +81,16 @@ func TestPublicKey_Encrypt(t *testing.T) {
 				return
 			}
 			if ct.Cmp(zero) != 1 {
-				t.Errorf("PublicKey.Encrypt() error = invalid ciphertext")
+				t.Errorf("PublicKey.Encrypt() error = invalid ciphertext (%v)", ct)
 				return
 			}
 			pt, err := sk.Decrypt(ct)
 			if err != nil {
-				t.Errorf("PublicKey.Encrypt() error = cannot decipher ciphertext")
+				t.Errorf("PublicKey.Encrypt() error = cannot decipher ciphertext (%v)", err)
 				return
 			}
 			if pt != tt.msg {
-				t.Errorf("PublicKey.Encrypt() error = ciphertext does not decipher to the original message")
+				t.Errorf("PublicKey.Encrypt() error = ciphertext does not decipher to the original message (%v, %v)", pt, tt.msg)
 				return
 			}
 		})
@@ -116,27 +98,19 @@ func TestPublicKey_Encrypt(t *testing.T) {
 }
 
 func TestPrivateKey_Decrypt(t *testing.T) {
-	n, ok := new(big.Int).SetString("bfd20fa8e61108a5f06e03cb822f5617749831e5a48f2ffa3c815c47a7b58d89b7b7c840210eea6f3afa16ccd258ebd1da7a7f1d8145fccc79c8c0cbd47a9481", 16)
-	if !ok {
-		panic("Error loading pre-computed publick key")
-	}
-	g := new(big.Int).Add(n, one)
-	nn := new(big.Int).Mul(n, n)
-	l, ok := new(big.Int).SetString("bfd20fa8e61108a5f06e03cb822f5617749831e5a48f2ffa3c815c47a7b58d87fb8619844f5e3b4c12535b8a6b8b645f03deb7a516c5bab68d106068e1b665c0", 16)
-	if !ok {
-		panic("Error loading pre-computed secret key")
-	}
+	n, _ := new(big.Int).SetString("bfd20fa8e61108a5f06e03cb822f5617749831e5a48f2ffa3c815c47a7b58d89b7b7c840210eea6f3afa16ccd258ebd1da7a7f1d8145fccc79c8c0cbd47a9481", 16)
 
-	m := new(big.Int).ModInverse(l, n)
+	l, _ := new(big.Int).SetString("bfd20fa8e61108a5f06e03cb822f5617749831e5a48f2ffa3c815c47a7b58d87fb8619844f5e3b4c12535b8a6b8b645f03deb7a516c5bab68d106068e1b665c0", 16)
 
 	pk := &PublicKey{
 		N:  n,
-		g:  g,
-		N2: nn,
+		g:  new(big.Int).Add(n, one),
+		N2: new(big.Int).Mul(n, n),
 	}
+
 	sk := &PrivateKey{
-		mu:     m,
 		lambda: l,
+		mu:     new(big.Int).ModInverse(l, n),
 		pk:     pk,
 	}
 
@@ -172,213 +146,6 @@ func TestPrivateKey_Decrypt(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("PrivateKey.Decrypt() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestPublicKey_Add(t *testing.T) {
-	pk, sk, err := GenerateKeyPair(1024)
-	if err != nil {
-		t.Errorf("Error generating key pair")
-		return
-	}
-	ct2, _ := pk.Encrypt(2)
-	ct245, _ := pk.Encrypt(245)
-
-	type args struct {
-		ct1 *big.Int
-		ct2 *big.Int
-	}
-
-	tests := []struct {
-		name    string
-		args    args
-		want    int64
-		wantErr bool
-	}{
-		{
-			"invalid inputs, must return error",
-			args{
-				zero,
-				zero,
-			},
-			0,
-			true,
-		},
-		{
-			"valid inputs, must return a valid ciphertext",
-			args{
-				ct2,
-				ct245,
-			},
-			247,
-			false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := pk.Add(tt.args.ct1, tt.args.ct2)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("PublicKey.Add() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if err != nil {
-				return
-			}
-
-			// Test the homomorphic property
-			sum, err := sk.Decrypt(got)
-			if err != nil {
-				t.Errorf("PublicKey.Add() error = invalid ciphertext generated by addition")
-				return
-			}
-			if sum != tt.want {
-				t.Errorf("PublicKey.Add() = %v, want %v", sum, tt.want)
-			}
-		})
-	}
-}
-
-func TestPublicKey_MultPlaintext(t *testing.T) {
-	pk, sk, err := GenerateKeyPair(1024)
-	if err != nil {
-		t.Errorf("Error generating key pair")
-		return
-	}
-	ct2, _ := pk.Encrypt(2)
-	ct36, _ := pk.Encrypt(36)
-
-	type args struct {
-		ct *big.Int
-		pt int64
-	}
-
-	tests := []struct {
-		name    string
-		args    args
-		want    int64
-		wantErr bool
-	}{
-		{
-			"invalid inputs, must return error",
-			args{
-				zero,
-				0,
-			},
-			0,
-			true,
-		},
-		{
-			"valid inputs, must return a valid ciphertext",
-			args{
-				ct2,
-				2,
-			},
-			4,
-			false,
-		},
-		{
-			"valid inputs, must return a valid ciphertext",
-			args{
-				ct36,
-				36,
-			},
-			1296,
-			false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := pk.MultPlaintext(tt.args.ct, tt.args.pt)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("PublicKey.MultPlaintext() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if err != nil {
-				return
-			}
-
-			// Test the homomorphic property
-			sum, err := sk.Decrypt(got)
-			if err != nil {
-				t.Errorf("PublicKey.MultPlaintext() error = invalid ciphertext generated by addition")
-				return
-			}
-			if sum != tt.want {
-				t.Errorf("PublicKey.MultPlaintext() = %v, want %v", sum, tt.want)
-			}
-		})
-	}
-}
-
-func TestPublicKey_AddPlaintext(t *testing.T) {
-	pk, sk, err := GenerateKeyPair(1024)
-	if err != nil {
-		t.Errorf("Error generating key pair")
-		return
-	}
-	ct2, _ := pk.Encrypt(2)
-	ct36, _ := pk.Encrypt(36)
-
-	type args struct {
-		ct *big.Int
-		pt int64
-	}
-
-	tests := []struct {
-		name    string
-		args    args
-		want    int64
-		wantErr bool
-	}{
-		{
-			"invalid inputs, must return error",
-			args{
-				zero,
-				0,
-			},
-			0,
-			true,
-		},
-		{
-			"valid inputs, must return a valid ciphertext",
-			args{
-				ct2,
-				2,
-			},
-			4,
-			false,
-		},
-		{
-			"valid inputs, must return a valid ciphertext",
-			args{
-				ct36,
-				36,
-			},
-			72,
-			false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := pk.AddPlaintext(tt.args.ct, tt.args.pt)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("PublicKey.AddPlaintext() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if err != nil {
-				return
-			}
-
-			// Test the homomorphic property
-			sum, err := sk.Decrypt(got)
-			if err != nil {
-				t.Errorf("PublicKey.AddPlaintext() error = invalid ciphertext generated by addition")
-				return
-			}
-			if sum != tt.want {
-				t.Errorf("PublicKey.AddPlaintext() = %v, want %v", sum, tt.want)
 			}
 		})
 	}

@@ -20,8 +20,8 @@ type PrivateKey struct {
 	pk     *PublicKey
 }
 
-var one = new(big.Int).SetInt64(1)
 var zero = new(big.Int).SetInt64(0)
+var one = new(big.Int).SetInt64(1)
 
 // GenerateKeyPair returns a Paillier key pair such that the squared modulus `N2`, in the
 // public key, has a bit length equivalent to the value informed in the `bitlen` parameter
@@ -29,16 +29,17 @@ func GenerateKeyPair(bitlen int) (*PublicKey, *PrivateKey, error) {
 	if bitlen < 1024 {
 		return nil, nil, fmt.Errorf("The `bitlen` parameter should not be smaller then 1024")
 	}
-	p := getPrime(bitlen / 4)
-	q := getPrime(bitlen / 4)
+	p := getPrime(bitlen / 2)
+	q := getPrime(bitlen / 2)
 
 	n := new(big.Int).Mul(p, q)
 	nn := new(big.Int).Mul(n, n)
 
-	g := new(big.Int).Add(n, one)
-
 	lambda := phi(p, q)
 	mu := new(big.Int).ModInverse(lambda, n)
+	g := new(big.Int).Add(n, one)
+	//lambda := lambda(p, q)
+	//g, mu := generator(n, nn, lambda)
 
 	pk := &PublicKey{
 		N:  n,
@@ -102,44 +103,9 @@ func (sk *PrivateKey) Decrypt(ct *big.Int) (int64, error) {
 	return m.Int64(), nil
 }
 
-// Add returns the ciphertext (ct3) that will decipher to the sum of
-// the corresponding messages (m1, m2) ciphered to (ct1, ct2)
-// (i.e ct1 = Enc(m1) ^ ct2 = Enc(m2) => Dec(Add(ct1, ct2)) = m1 + m2 mod N)
-func (pk *PublicKey) Add(ct1, ct2 *big.Int) (*big.Int, error) {
-	if ct1 == nil || ct2 == nil || ct1.Cmp(zero) != 1 || ct2.Cmp(zero) != 1 {
-		return nil, fmt.Errorf("invalid input")
-	}
-	z := new(big.Int).Mul(ct1, ct2)
-
-	return z.Mod(z, pk.N2), nil
-}
-
-// MultPlaintext returns the ciphertext the will decipher to multiplication
-// of the plaintexts (i.e ct = Enc(m1) => Dec(Mul(ct, m2)) = m1 * m2 mod N)
-func (pk *PublicKey) MultPlaintext(ct *big.Int, msg int64) (*big.Int, error) {
-	if ct == nil || ct.Cmp(zero) != 1 {
-		return nil, fmt.Errorf("invalid input")
-	}
-	return new(big.Int).Exp(ct, new(big.Int).SetInt64(msg), pk.N2), nil
-}
-
-// AddPlaintext returns the ciphertext the will decipher to addition
-// of the plaintexts (i.e ct = Enc(m1) => Dec(Mul(ct, m2)) = m1 + m2 mod N)
-func (pk *PublicKey) AddPlaintext(ct *big.Int, msg int64) (*big.Int, error) {
-	if ct == nil || ct.Cmp(zero) != 1 {
-		return nil, fmt.Errorf("invalid input")
-	}
-
-	ct2 := new(big.Int).Exp(pk.g, new(big.Int).SetInt64(msg), pk.N2)
-	// ct * g^msg mod N^2
-	return new(big.Int).Mod(new(big.Int).Mul(ct, ct2), pk.N2), nil
-}
-
-// L (x) = (x-1)/n is the largest integer quocient `q` to satisfy (x-1) >= a*n
+// L (x,n) = (x-1)/n is the largest integer quocient `q` to satisfy (x-1) >= q*n
 func L(x, n *big.Int) *big.Int {
-	//q, _ := new(big.Int).DivMod(new(big.Int).Sub(x, one), n, one)
-	q := new(big.Int).Div(new(big.Int).Sub(x, one), n)
-	return q
+	return new(big.Int).Div(new(big.Int).Sub(x, one), n)
 }
 
 // generates a random number, testing if it is a probable prime
@@ -152,7 +118,7 @@ func getPrime(bits int) *big.Int {
 	return p
 }
 
-// generates a random Int `r` such that `r < n` and `gcd(r,n) = 1`
+// getRandom generates a random Int `r` such that `r < n` and `gcd(r,n) = 1`
 func getRandom(n *big.Int) *big.Int {
 	gcd := new(big.Int)
 	r := new(big.Int)
@@ -169,9 +135,11 @@ func getRandom(n *big.Int) *big.Int {
 	return r
 }
 
-// Computes Carmichael's function on `n`, `λ(n) = lcm(p-1, q-1)``
-func lambda(n *big.Int) *big.Int {
-	return nil
+// Computes Carmichael's function on `n`, `λ(n) = lcm(p-1, q-1)`
+// as |p*q|/GCD(p,q)
+func lambda(p *big.Int, q *big.Int) *big.Int {
+	l := new(big.Int).GCD(nil, nil, p, q)
+	return l.Mul(l.Div(p, l), q)
 }
 
 // Computes Euler's totient function `φ(p,q) = (p-1)*(q-1)`
@@ -179,4 +147,19 @@ func phi(x, y *big.Int) *big.Int {
 	p1 := new(big.Int).Sub(x, one)
 	q1 := new(big.Int).Sub(y, one)
 	return new(big.Int).Mul(p1, q1)
+}
+
+// generator tests smalls primes for gcd(L(g^λ mod n^2), n) = 1.
+// If no prime smaller then 17 holds that condition, returns n+1
+func generator(n, nn, lambda *big.Int) (*big.Int, *big.Int) {
+	primes := []int64{2, 3, 5, 7, 11, 13, 17}
+	for _, p := range primes {
+		g := new(big.Int).SetInt64(p)
+		z := new(big.Int).Exp(g, lambda, nn)
+		mu := L(z, n)
+		if z.GCD(nil, nil, mu, n).Cmp(one) == 0 {
+			return g, mu.ModInverse(mu, n)
+		}
+	}
+	return new(big.Int).Add(n, one), new(big.Int).ModInverse(n, nn)
 }
