@@ -29,13 +29,12 @@ func (pk *PublicKey) MultPlaintext(ct *big.Int, msg int64) (*big.Int, error) {
 // AddPlaintext returns the ciphertext the will decipher to addition
 // of the plaintexts (i.e if ct = Enc(m1), then Dec(AddPlaintext(ct, m2)) = m1 + m2 mod N)
 func (pk *PublicKey) AddPlaintext(ct *big.Int, msg int64) (*big.Int, error) {
-	if ct == nil || ct.Cmp(zero) != 1 {
+	if ct == nil || ct.Cmp(zero) != 1 || msg < 0 {
 		return nil, fmt.Errorf("invalid input")
 	}
 
 	ct2 := new(big.Int).Exp(pk.g, new(big.Int).SetInt64(msg), pk.N2)
-	// ct * g^msg mod N^2
-	return new(big.Int).Mod(new(big.Int).Mul(ct, ct2), pk.N2), nil
+	return ct2.Mod(ct2.Mul(ct2, ct), pk.N2), nil
 }
 
 // BatchAdd optmizes the homomorphic addition of a list of ciphertexts. That
@@ -43,8 +42,11 @@ func (pk *PublicKey) AddPlaintext(ct *big.Int, msg int64) (*big.Int, error) {
 // corresponding plaintext messages.
 func (pk *PublicKey) BatchAdd(cts ...*big.Int) *big.Int {
 	total := new(big.Int).SetInt64(1)
-	for _, ct := range cts {
+	for i, ct := range cts {
 		total.Mul(total, ct)
+		if i%5 == 0 {
+			total.Mod(total, pk.N2)
+		}
 	}
 	return total.Mod(total, pk.N2)
 }
