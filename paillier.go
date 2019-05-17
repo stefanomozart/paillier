@@ -62,15 +62,23 @@ func NewPublicKey(N, g string) (*PublicKey, error) {
 	if !ok {
 		return nil, fmt.Errorf("Invalid value for the modulus N")
 	}
+	g2, ok2 := new(big.Int).SetString(g, 16)
+	if !ok2 {
+		return nil, fmt.Errorf("Invalid value for the modulus N")
+	}
 	return &PublicKey{
 		N:  n,
-		g:  new(big.Int).Add(n, one),
+		g:  g2,
 		N2: new(big.Int).Mul(n, n),
 	}, nil
 }
 
-// Encrypt returns a IND-CPA secure ciphertext for the message msg
-// where ct :=
+// ToString exports the public key values to hexadecimal strings
+func (pk *PublicKey) ToString() (string, string) {
+	return pk.N.Text(16), pk.g.Text(16)
+}
+
+// Encrypt returns a IND-CPA secure ciphertext for the message `msg`
 func (pk *PublicKey) Encrypt(msg int64) (*big.Int, error) {
 	m := new(big.Int).SetInt64(msg)
 

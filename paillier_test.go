@@ -57,6 +57,32 @@ func TestGenerateKeyPair(t *testing.T) {
 	}
 }
 
+func TestPublicKey_ToString(t *testing.T) {
+	tests := []struct {
+		name   string
+		bitlen int
+	}{
+		{"1024", 1024},
+		{"2018", 2048},
+		{"3072", 3072},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pk, _, _ := GenerateKeyPair(tt.bitlen)
+
+			N, g := pk.ToString()
+			pk2, err := NewPublicKey(N, g)
+			if err != nil {
+				t.Errorf("PublicKey.ToString() %v", err)
+			}
+			_, err2 := pk2.Encrypt(int64(1))
+			if err2 != nil {
+				t.Errorf("PublicKey.ToString() invalid key info")
+			}
+		})
+	}
+}
+
 func TestPublicKey_Encrypt(t *testing.T) {
 	pk, sk, _ := GenerateKeyPair(1024)
 
