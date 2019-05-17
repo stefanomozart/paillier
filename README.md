@@ -5,24 +5,32 @@
 
 An implementation of the Paillier cryptosystem in Golang.
 
-The description of the cryptosystem, of its homomorphic porperties and the security proof can be
-found on Paillier's orginal work: [Public-Key Cryptosystems Based on Composite Degree Residuosity Classes](http://www.cs.tau.ac.il/~fiat/crypt07/papers/Pai99pai.pdf).
+The cryptosystem implemented in this package corresponds to Scheme 1 on Paillier's original work
+[[1](http://www.cs.tau.ac.il/~fiat/crypt07/papers/Pai99pai.pdf)]. It's security is based on the
+Decisional Composite Residuosity Assumption, which Paillier demonstrates to be equivalent, in
+hardness, to the RSA problem.
 
-The cryptosystem implemented in this package corresponds to Scheme 1 on above cited Paillier's work.
-It's security is based on the Decisional Composite Residuosity Assumption, which Paillier 
-demonstrates to be equivalent, in hardness, to the RSA problem.
-
-It is a assimetric system, with a public key composed of <`N`, `g`> - a circular group modulus `N`
+It is an assimetric system, with a public key composed of <`N`, `g`> - a circular group modulus `N`
 and generator `g`. The private key is composed of <`λ`, `µ`> - Carmichael's function on `N`,
-`λ(n) = lcm(p-1, q-1)`, and the modular inverse of `((g^λ mod N^2) - 1 / N)` on `N^2`.
+`λ(n) = lcm(p-1, q-1)`, and the modular multiplicative inverse of `((g^λ mod N^2) - 1 / N)` on `N^2`.
 
 The system has the following properties:
 
-1. CPA & CCA security: knowlege of a plaintext message and a corresponding ciphertext does not give
-any advantadges to the attacker. Note that the system will produce uniformelly distributed
-ciphertexts over `N^2`, so you get different ciphertexts encrypting the same message multiple times;
-2. Homomorphiic addition: Dec(Enc(a) * Enc(b) mod N^2) = a + b mod N;
-3. Homomorphiic multiplication: Dec(Enc(a)^b mod N^2) = a * b mod N.
+1. CPA & CCA security;
+2. Homomorphific addition: Dec(Enc(a) * Enc(b) mod N^2) = a + b mod N;
+3. Homomorphific multiplication: Dec(Enc(a)^b mod N^2) = a * b mod N.
+
+For a better description of the cryptosystem, of its homomorphic properties and the security proof,
+please, refer to Paillier's work: [Public-Key Cryptosystems Based on Composite Degree Residuosity
+Classes](http://www.cs.tau.ac.il/~fiat/crypt07/papers/Pai99pai.pdf).
+
+## Installation
+
+Use `go get` to install the package.
+
+```bash
+go get -u github.com/stefanomozart/paillier
+```
 
 ## Key Generation
 
@@ -52,7 +60,7 @@ print(pk.N.BitLen()) // this should print '3072'
 ```
 
 If you want to send the public key to another process, use the `PublicKey.ToString()` method in
-order to get the public key values `N`and `g` in hexadecimal. Then load these values on the other 
+order to get the public key values `N`and `g` in hexadecimal. Then load these values on the other
 process with `paillier.NewPublicKey(N, g string)`.
 
 ```go
@@ -64,15 +72,22 @@ sk, pk, _ := paillier.GenerateKeyPair(3072)
 // 2. Take the hexadecimal values of `N` and `g`
 N, g := pk.ToString()
 
-// 3. Send `N` and `g`, then load the public key in the other process
-pk, err := paillier.NewPublicKey(N, g)
+// 3. Send strings `N` and `g` to the other process. Then, load the public key with:
+pk2, err := paillier.NewPublicKey(N, g)
+
+// 4. Now, you should be able to use the public key `pk2` for encryption and to perform
+// homomorphic computations
+ct1, _ := pk2.Encrypt(1)
+ct2, _ := pk2.Encrypt(2)
+ct3 := pk2.Add(ct1, ct2)
 ```
 
 ## Encryption & Decryption
 
 Encryption and decryption are also very easy, using `paillier.PublicKey.Encrypt(msg int64)` and
 `paillier.PrivateKey.Decrypt(ct *big.Int)`. Note that Encryption in the Paillier cryptosystem is
-restricted to non-negative integers in the interval [`0`, `PublicKey.N`).
+restricted to non-negative integers in the interval [`0`, `PublicKey.N`). So, trying to encrypt
+a negative value, or any number greater than `N` will cause the method to return an error.
 
 ```go
 import (
@@ -84,8 +99,8 @@ import (
 sk, pk, _ := paillier.GenerateKeyPair(2048)
 
 // 2. Encrypt a plaintext (must be a non-negative int64 value)
-c1 := pk.Encrypt(0)
-c2 := pk.Encrypt(math.MaxInt64)
+c1, _ := pk.Encrypt(0)
+c2, _ := pk.Encrypt(math.MaxInt64)
 
 // 3. Decrypt a ciphertext
 println(sk.Decrypt(c1)) // this will print '0'
@@ -96,9 +111,9 @@ print(sk.Decrypt(c2)) // this will print '9223372036854775807'
 
 ### Addition and multiplication
 
-If you have two plaintexts `m1`, `m2` that were encrypted to `c1`, `c2`, respectivelly, you can use
-the method `PublickKey.Add(c1, c2 *big.Int)` to produce a new ciphertext `c3`, that will decipher to
-the sum of `m1` and `m2`.
+If you have two plaintexts `m1`, `m2` that were encrypted to ciphertexts `c1`, `c2`, respectivelly,
+you can use the method `PublickKey.Add(c1, c2 *big.Int)` to produce a new ciphertext `c3`, that will
+decipher to the sum of `m1` and `m2`.
 
 ```go
 import "github.com/stefanomozart/paillier"
@@ -108,8 +123,8 @@ sk, pk, _ := paillier.GenerateKeyPair(2048)
 
 // 2. Encrypt two plaintexts
 m1, m2 := int64(10), int64(20)
-c1 := pk.Encrypt(m1)
-c2 := pk.Encrypt(m2)
+c1, _ := pk.Encrypt(m1)
+c2, _ := pk.Encrypt(m2)
 
 // 3. Use the homomorphic addition over the ciphertexts
 c3 := pk.Add(c1, c2)
@@ -146,8 +161,8 @@ inverse.
 
 Note that you must be sure that the plainttext corresponding to the ciphertext in first parameter
 is bigger than the one corresponding to the second parameter. That is, if `ct1 = PublicKey.Encrypt(m1)`
-and `ct2 = PublicKey.Encrypt(m2)`, then `ct3 = PublicKey.Sub(ct1, ct2)` will only make sense, if
-`m1 > m2`.
+and `ct2 = PublicKey.Encrypt(m2)`, then `ct3 = PublicKey.Sub(ct1, ct2)` will only make sense if
+`m1` > `m2`.
 
 ```go
 import "github.com/stefanomozart/paillier"
@@ -156,7 +171,7 @@ import "github.com/stefanomozart/paillier"
 sk, pk, _ := paillier.GenerateKeyPair(2048)
 
 // 2. Encrypt two plaintexts
-m1, m2 := 10, 20
+m1, m2 := int64(10), int64(20)
 c1 := pk.Encrypt(m1)
 c2 := pk.Encrypt(m2)
 
