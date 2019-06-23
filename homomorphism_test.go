@@ -190,6 +190,11 @@ func TestPublicKey_BatchAdd(t *testing.T) {
 	ct4, _ := pk.Encrypt(4)
 	ct5, _ := pk.Encrypt(5)
 
+	cap := 1000
+	ctCAPx5 := make([]*big.Int, cap)
+	for i := 0; i < cap; i++ {
+		ctCAPx5[i], _ = pk.Encrypt(5)
+	}
 	tests := []struct {
 		name string
 		args []*big.Int
@@ -209,6 +214,11 @@ func TestPublicKey_BatchAdd(t *testing.T) {
 			"sum 2..5",
 			[]*big.Int{ct2, ct3, ct4, ct5},
 			14,
+		},
+		{
+			"sum trying very large number, around 2000x5 or as much as the memory allows",
+			ctCAPx5,
+			int64(cap * 5),
 		},
 	}
 	for _, tt := range tests {
@@ -300,6 +310,18 @@ func TestPublicKey_DivPlaintext(t *testing.T) {
 			"valid inputs, must return a valid ciphertext",
 			args{ct36, 2},
 			18,
+			false,
+		},
+		{
+			"valid inputs, must return a valid ciphertext",
+			args{ct36, 6},
+			6,
+			false,
+		},
+		{
+			"valid inputs, must return a valid ciphertext",
+			args{ct36, 5},
+			7,
 			false,
 		},
 	}
